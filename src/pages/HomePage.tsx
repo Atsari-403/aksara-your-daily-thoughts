@@ -73,7 +73,7 @@ export function HomePage() {
   };
   return (
     <>
-      <div className="min-h-screen bg-background dark:bg-gradient-subtle font-sans antialiased">
+      <div className="min-h-screen bg-background font-sans antialiased">
         <ThemeToggle className="fixed top-4 right-4" />
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-16 md:py-24">
