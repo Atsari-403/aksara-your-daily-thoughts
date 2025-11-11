@@ -1,148 +1,192 @@
-// Home page of the app, Currently a demo page for demonstration.
-// Please rewrite this file to implement your own logic. Do not replace or delete it, simply rewrite this HomePage.tsx file.
-import { useEffect } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { Toaster, toast } from '@/components/ui/sonner'
-import { create } from 'zustand'
-import { useShallow } from 'zustand/react/shallow'
-import { AppLayout } from '@/components/layout/AppLayout'
-
-// Timer store: independent slice with a clear, minimal API, for demonstration
-type TimerState = {
-  isRunning: boolean;
-  elapsedMs: number;
-  start: () => void;
-  pause: () => void;
-  reset: () => void;
-  tick: (deltaMs: number) => void;
-}
-
-const useTimerStore = create<TimerState>((set) => ({
-  isRunning: false,
-  elapsedMs: 0,
-  start: () => set({ isRunning: true }),
-  pause: () => set({ isRunning: false }),
-  reset: () => set({ elapsedMs: 0, isRunning: false }),
-  tick: (deltaMs) => set((s) => ({ elapsedMs: s.elapsedMs + deltaMs })),
-}))
-
-// Counter store: separate slice to showcase multiple stores without coupling
-type CounterState = {
-  count: number;
-  inc: () => void;
-  reset: () => void;
-}
-
-const useCounterStore = create<CounterState>((set) => ({
-  count: 0,
-  inc: () => set((s) => ({ count: s.count + 1 })),
-  reset: () => set({ count: 0 }),
-}))
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Loader2, Send, Trash2, Feather } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { id } from 'date-fns/locale';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Toaster, toast } from '@/components/ui/sonner';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Skeleton } from '@/components/ui/skeleton';
+import { api } from '@/lib/api-client';
+import type { Thought } from '@shared/types';
 export function HomePage() {
-  // Select only what is needed to avoid unnecessary re-renders
-  const { isRunning, elapsedMs } = useTimerStore(
-    useShallow((s) => ({ isRunning: s.isRunning, elapsedMs: s.elapsedMs })),
-  )
-  const start = useTimerStore((s) => s.start)
-  const pause = useTimerStore((s) => s.pause)
-  const resetTimer = useTimerStore((s) => s.reset)
-  const count = useCounterStore((s) => s.count)
-  const inc = useCounterStore((s) => s.inc)
-  const resetCount = useCounterStore((s) => s.reset)
-
-  // Drive the timer only while running; avoid update-depth issues with a scoped RAF
+  const [thoughts, setThoughts] = useState<Thought[]>([]);
+  const [newThought, setNewThought] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const fetchThoughts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await api<Thought[]>('/api/thoughts');
+      setThoughts(data);
+    } catch (error) {
+      toast.error('Gagal memuat keluh kesah.');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
   useEffect(() => {
-    if (!isRunning) return
-    let raf = 0
-    let last = performance.now()
-    const loop = () => {
-      const now = performance.now()
-      const delta = now - last
-      last = now
-      // Read store API directly to keep effect deps minimal and stable
-      useTimerStore.getState().tick(delta)
-      raf = requestAnimationFrame(loop)
+    fetchThoughts();
+  }, [fetchThoughts]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newThought.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const createdThought = await api<Thought>('/api/thoughts', {
+        method: 'POST',
+        body: JSON.stringify({ text: newThought }),
+      });
+      setThoughts(prev => [createdThought, ...prev]);
+      setNewThought('');
+      toast.success('Keluh kesah berhasil disimpan!');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan.';
+      toast.error(`Gagal menyimpan: ${errorMessage}`);
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [isRunning])
-
-  const onPleaseWait = () => {
-    inc()
-    if (!isRunning) {
-      start()
-      toast.success('Building your app…', {
-        description: 'Hang tight, we\'re setting everything up.',
-      })
-    } else {
-      pause()
-      toast.info('Taking a short pause', {
-        description: 'We\'ll continue shortly.',
-      })
+  };
+  const handleDelete = async (id: string) => {
+    // Optimistic UI update
+    const originalThoughts = thoughts;
+    setThoughts(prev => prev.filter(t => t.id !== id));
+    try {
+      await api(`/api/thoughts/${id}`, { method: 'DELETE' });
+      toast.success('Keluh kesah berhasil dihapus.');
+    } catch (error) {
+      // Revert on failure
+      setThoughts(originalThoughts);
+      toast.error('Gagal menghapus keluh kesah.');
+      console.error(error);
     }
-  }
-
-  const formatted = formatDuration(elapsedMs)
-
+  };
   return (
-    <AppLayout>
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-        <ThemeToggle />
-        <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-        <div className="text-center space-y-8 relative z-10 animate-fade-in">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-              <Sparkles className="w-8 h-8 text-white rotating" />
-            </div>
+    <>
+      <div className="min-h-screen bg-background dark:bg-gradient-subtle font-sans antialiased">
+        <ThemeToggle className="fixed top-4 right-4" />
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-16 md:py-24">
+            <header className="text-center space-y-4 animate-fade-in">
+              <div className="inline-block p-3 bg-primary/10 rounded-full">
+                <Feather className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground">
+                Keluh Kesahmu
+              </h1>
+              <p className="text-lg text-muted-foreground max-w-xl mx-auto">
+                Tuliskan apa yang ada di pikiranmu hari ini. Lepaskan dan biarkan mengalir.
+              </p>
+            </header>
+            <section className="mt-12 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Textarea
+                  value={newThought}
+                  onChange={(e) => setNewThought(e.target.value)}
+                  placeholder="Tulis kata-kata hari ini..."
+                  className="min-h-[120px] text-base p-4 focus-visible:ring-2 focus-visible:ring-primary/50"
+                  maxLength={500}
+                  disabled={isSubmitting}
+                />
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-muted-foreground">
+                    {newThought.length} / 500
+                  </p>
+                  <Button type="submit" disabled={!newThought.trim() || isSubmitting}>
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Simpan
+                  </Button>
+                </div>
+              </form>
+            </section>
+            <section className="mt-16">
+              <div className="space-y-6">
+                {isLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i} className="p-6">
+                      <Skeleton className="h-4 w-3/4 mb-4" />
+                      <Skeleton className="h-4 w-1/2" />
+                      <div className="flex justify-end mt-4">
+                        <Skeleton className="h-8 w-20" />
+                      </div>
+                    </Card>
+                  ))
+                ) : thoughts.length > 0 ? (
+                  <AnimatePresence>
+                    {thoughts.map((thought) => (
+                      <motion.div
+                        key={thought.id}
+                        layout
+                        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                        transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      >
+                        <Card className="overflow-hidden group transition-all duration-200 hover:shadow-lg hover:border-primary/20">
+                          <CardContent className="p-6">
+                            <p className="text-foreground text-pretty leading-relaxed">
+                              {thought.text}
+                            </p>
+                          </CardContent>
+                          <CardFooter className="bg-muted/50 px-6 py-3 flex justify-between items-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <p className="text-sm text-muted-foreground cursor-default">
+                                    {formatDistanceToNow(new Date(thought.createdAt), { addSuffix: true, locale: id })}
+                                  </p>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{format(new Date(thought.createdAt), "eeee, d MMMM yyyy 'pukul' HH:mm", { locale: id })}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => handleDelete(thought.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                ) : (
+                  <div className="text-center py-16 border-2 border-dashed rounded-lg animate-fade-in">
+                    <Feather className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-4 text-lg font-medium text-foreground">Belum ada keluh kesah</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Jadilah yang pertama untuk menuliskan sesuatu.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button 
-              size="lg"
-              onClick={onPleaseWait}
-              className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-              aria-live="polite"
-            >
-              Please Wait
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <div>
-              Time elapsed: <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-            </div>
-            <div>
-              Coins: <span className="font-medium tabular-nums text-foreground">{count}</span>
-            </div>
-          </div>
-          <div className="flex justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetTimer(); resetCount(); toast('Reset complete') }}>
-              Reset
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { inc(); toast('Coin added') }}>
-              Add Coin
-            </Button>
-          </div>
-        </div>
-        <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-          <p>Powered by Cloudflare</p>
+        </main>
+        <footer className="text-center py-8 text-sm text-muted-foreground">
+          <p>made with vibe code atsari</p>
         </footer>
-        <Toaster richColors closeButton />
       </div>
-    </AppLayout>
-  )
+      <Toaster richColors closeButton />
+    </>
+  );
 }
+// Shadcn UI Tooltip components are needed for the date display
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
