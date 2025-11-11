@@ -36,5 +36,5 @@ export class ChatBoardEntity extends IndexedEntity<ChatBoardState> {
 export class ThoughtEntity extends IndexedEntity<Thought> {
     static readonly entityName = "thought";
     static readonly indexName = "thoughts";
-    static readonly initialState: Thought = { id: "", text: "", createdAt: 0 };
+    static readonly initialState: Thought = { id: "", text: "", author: "", createdAt: 0 };
 }

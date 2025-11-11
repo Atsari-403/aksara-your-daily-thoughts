@@ -23,5 +23,6 @@ export interface ChatMessage {
 export interface Thought {
   id: string;
   text: string;
+  author: string;
   createdAt: number;
 }

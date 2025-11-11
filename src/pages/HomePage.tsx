@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Loader2, Send, Trash2, Feather } from 'lucide-react';
+import { Loader2, Send, Feather } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Toaster, toast } from '@/components/ui/sonner';
@@ -20,6 +21,7 @@ import {
 export function HomePage() {
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [newThought, setNewThought] = useState('');
+  const [author, setAuthor] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fetchThoughts = useCallback(async () => {
@@ -44,10 +46,11 @@ export function HomePage() {
     try {
       const createdThought = await api<Thought>('/api/thoughts', {
         method: 'POST',
-        body: JSON.stringify({ text: newThought }),
+        body: JSON.stringify({ text: newThought, author }),
       });
       setThoughts(prev => [createdThought, ...prev]);
       setNewThought('');
+      // Do not clear author name to allow multiple posts
       toast.success('Keluh kesah berhasil disimpan!');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan.';
@@ -55,20 +58,6 @@ export function HomePage() {
       console.error(error);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-  const handleDelete = async (id: string) => {
-    // Optimistic UI update
-    const originalThoughts = thoughts;
-    setThoughts(prev => prev.filter(t => t.id !== id));
-    try {
-      await api(`/api/thoughts/${id}`, { method: 'DELETE' });
-      toast.success('Keluh kesah berhasil dihapus.');
-    } catch (error) {
-      // Revert on failure
-      setThoughts(originalThoughts);
-      toast.error('Gagal menghapus keluh kesah.');
-      console.error(error);
     }
   };
   return (
@@ -90,14 +79,28 @@ export function HomePage() {
             </header>
             <section className="mt-12 animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Textarea
-                  value={newThought}
-                  onChange={(e) => setNewThought(e.target.value)}
-                  placeholder="Tulis kata-kata hari ini..."
-                  className="min-h-[120px] text-base p-4 focus-visible:ring-2 focus-visible:ring-primary/50"
-                  maxLength={500}
-                  disabled={isSubmitting}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-1">
+                    <Input
+                      value={author}
+                      onChange={(e) => setAuthor(e.target.value)}
+                      placeholder="Nama (opsional)"
+                      className="h-12 text-base"
+                      maxLength={50}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Textarea
+                      value={newThought}
+                      onChange={(e) => setNewThought(e.target.value)}
+                      placeholder="Tulis kata-kata hari ini..."
+                      className="min-h-[120px] text-base p-4 focus-visible:ring-2 focus-visible:ring-primary/50"
+                      maxLength={500}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-muted-foreground">
                     {newThought.length} / 500
@@ -136,13 +139,16 @@ export function HomePage() {
                         exit={{ opacity: 0, y: -20, scale: 0.95 }}
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                       >
-                        <Card className="overflow-hidden group transition-all duration-200 hover:shadow-lg hover:border-primary/20">
+                        <Card className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-primary/20">
                           <CardContent className="p-6">
                             <p className="text-foreground text-pretty leading-relaxed">
                               {thought.text}
                             </p>
                           </CardContent>
                           <CardFooter className="bg-muted/50 px-6 py-3 flex justify-between items-center">
+                            <p className="text-sm text-muted-foreground">
+                              <span className="font-medium text-foreground">{thought.author}</span>
+                            </p>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -155,14 +161,6 @@ export function HomePage() {
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-muted-foreground h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => handleDelete(thought.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </CardFooter>
                         </Card>
                       </motion.div>

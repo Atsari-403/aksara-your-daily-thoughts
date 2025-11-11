@@ -12,16 +12,18 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, items);
   });
   app.post('/api/thoughts', async (c) => {
-    const { text } = (await c.req.json()) as { text?: string };
+    const { text, author } = (await c.req.json()) as { text?: string; author?: string };
     if (!isStr(text) || text.trim().length === 0) {
       return bad(c, 'Kata-kata tidak boleh kosong.');
     }
     if (text.length > 500) {
       return bad(c, 'Kata-kata terlalu panjang (maksimal 500 karakter).');
     }
+    const finalAuthor = (author && author.trim().length > 0) ? author.trim() : 'anonymous';
     const newThought: Thought = {
       id: crypto.randomUUID(),
       text: text.trim(),
+      author: finalAuthor,
       createdAt: Date.now(),
     };
     const created = await ThoughtEntity.create(c.env, newThought);
