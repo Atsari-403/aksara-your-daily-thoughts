@@ -11,6 +11,12 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api-client';
 import type { Thought } from '@shared/types';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 export function HomePage() {
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [newThought, setNewThought] = useState('');
@@ -183,10 +189,3 @@ export function HomePage() {
     </>
   );
 }
-// Shadcn UI Tooltip components are needed for the date display
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
